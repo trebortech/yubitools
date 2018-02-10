@@ -6,6 +6,7 @@ import string
 import random
 import time
 import usb.core
+import os.path
 
 # Import Yubico libs
 from ykman import driver_ccid as CCID
@@ -21,7 +22,11 @@ def config_key():
     defaultMGT = '010203040506070801020304050607080102030405060708'
     byteMGT = a2b_hex(defaultMGT)
     
-    config = json.load(open('auto_key.json'))
+    if os.path.isfile('auto_key.json'):
+        config = json.load(open('auto_key.json'))
+    else:
+        config = {}
+        print "No configuration file is available. Using defaults"
 
     # Retries
     if 'pinretries' not in config:
@@ -77,6 +82,8 @@ def config_key():
         newPIN = yk['serial']
     elif config['defaultpin'] == 'static':
         newPIN = config['staticpin']
+    elif config['defaultpin'] == 'factory':
+        newPIN = config['staticpin']
 
     if newPIN != defaultPIN:
         newPIN = str(newPIN)
@@ -92,6 +99,8 @@ def config_key():
         newPUK = yk['serial']
     elif config['defaultpuk'] == 'static':
         newPUK = config['staticpuk']
+    elif config['defaultpuk'] == 'factory':
+        newPUK = config['staticpuk']
 
     if newPUK != defaultPUK:
         newPUK = str(newPUK)
@@ -106,7 +115,9 @@ def config_key():
     elif config['defaultmgt'] == 'serial':
         newMGT = yk['serial']
     elif config['defaultmgt'] == 'static':
-        newMGT = config['staticpuk']
+        newMGT = config['staticmgt']
+    elif config['defaultmgt'] == 'factory':
+        newMGT = config['staticmgt']
 
     if newMGT != defaultMGT:
         newMGT = str(newMGT)
