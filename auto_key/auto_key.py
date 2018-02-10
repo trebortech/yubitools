@@ -7,6 +7,7 @@ import random
 import time
 import usb.core
 import os.path
+import sys
 
 # Import Yubico libs
 from ykman import driver_ccid as CCID
@@ -162,4 +163,10 @@ def usbloop():
         pass
 
 if __name__ == '__main__':
-	usbloop()
+    print "**********  WARNING *****************"
+    print "This will reset the Yubikey that is currently connected."
+    print "Do you want to continue?"
+    sys.stdout.write("yes / NO ")
+    choice = raw_input().lower()
+    if choice == 'yes':
+    	usbloop()
