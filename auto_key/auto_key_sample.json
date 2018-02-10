@@ -1,0 +1,10 @@
+{
+    "pinretries": 6,
+    "pukretries": 6,
+    "defaultpin": "serial",  (serial, random, factory, static)
+    "defaultpuk": "random",  (serial, random, factory, static)
+    "defaultmgt": "random",  (serial, random, factory, static)
+    "staticpin": "123456",
+    "staticpuk": "12345678",
+    "staticmgt": "12345678",
+}
