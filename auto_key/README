@@ -1,3 +1,11 @@
+Purpose:
+This tool will do the following
+- Reset Yubikey to factory default
+- Set the PIN / PUK retries
+- Set a New Pin (if configured in config file)
+- Set a New Puk (if configured in config file)
+- Set a New Management Key (if configured in config file)
+
 To use: (after all requirements below are met)
 
 python auto_key.py
