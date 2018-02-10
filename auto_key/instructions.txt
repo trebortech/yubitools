@@ -1,0 +1,31 @@
+To use: (after all requirements below are met)
+
+python auto_key.py
+place Yubikey into USB slot (only a single USB Key should be in computer at a time)
+When for message to say Remove Key.
+Remove key and put new key into USB slot
+When complete press Ctrl + C to exit
+
+
+Requirement:
+
+Installation on Ubuntu 16.04
+apt update
+apt upgrade -y
+apt install openssh-server
+apt-add-repository ppa:yubico/stable
+apt update
+apt install python-pip libu2f-host0 libykpers-1-1 python-pyscard pcscd
+pip install yubikey-manager
+service pcscd start
+
+
+Configuration file:
+name: auto_key.json
+This json file provides the configuration values for auto_key to use when configuration Yubikeys.
+The auto_key_sample.json will be used to document the available settings.
+
+
+TO DO:
+- Provide differnt configuration file from command line
+- Export Serial, PIN, PUK, MGT Key values to encrypted file
