@@ -13,6 +13,24 @@ import sys
 from ykman import driver_ccid as CCID
 from ykman import piv as PIV
 
+# Supporting class
+
+class bcolors:
+    WARNING = '\033[93m'
+    BOLD = '\033[1m'
+    ENDC = '\033[0m'
+    Red = '\033[91m'
+    Green = '\033[92m'
+    Blue = '\033[94m'
+    Cyan = '\033[96m'
+    White = '\033[97m'
+    Yellow = '\033[93m'
+    Magenta = '\033[95m'
+    Grey = '\033[90m'
+    Black = '\033[90m'
+    Default = '\033[99m'
+
+
 
 # Method to configure yubikey using config
 
@@ -163,10 +181,10 @@ def usbloop():
         pass
 
 if __name__ == '__main__':
-    print "**********  WARNING *****************"
+    print bcolors.Red + "**********  WARNING *****************" + bcolors.ENDC
     print "This will reset the Yubikey that is currently connected."
     print "Do you want to continue?"
-    sys.stdout.write("yes / NO ")
+    print bcolors.Yellow + "yes / NO " + bcolors.ENDC
     choice = raw_input().lower()
     if choice == 'yes':
     	usbloop()
