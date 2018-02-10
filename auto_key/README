@@ -17,7 +17,7 @@ When complete press Ctrl + C to exit
 
 Requirement:
 
-Installation on Ubuntu 16.04
+To install requirements for Ubuntu 16.04
 apt update
 apt upgrade -y
 apt install openssh-server
@@ -37,3 +37,4 @@ The auto_key_sample.json will be used to document the available settings.
 TO DO:
 - Provide differnt configuration file from command line
 - Export Serial, PIN, PUK, MGT Key values to encrypted file
+- Run verification on new settings
