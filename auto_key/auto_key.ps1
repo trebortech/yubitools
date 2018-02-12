@@ -1,5 +1,6 @@
 
 
+
 $script:defaultPIN = '123456'
 $script:defaultPUK = '12345678'
 $script:defaultMGT = '010203040506070801020304050607080102030405060708'
@@ -90,6 +91,10 @@ Function config_key {
         ykman.exe piv change-management-key -m $script:defaultMGT -n $passMGT
         write-host "New Management Key: $passMGT" -foregroundcolor red
     }
+
+    $senstivedata = "$passPIN | $passPUK | $passMGT"
+    $output = "$serialnumber | $senstivedata | $script:pinretries | $script:pukretries "
+    $output | out-file "auto_key_results.txt" -append
 }
 
 Function Get-USB {
