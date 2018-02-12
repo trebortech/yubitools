@@ -3,5 +3,5 @@
     "pukretries": 6,
     "defaultpin": "serial",
     "defaultpuk": "random",
-    "defaultmgt": "random"
+    "defaultmgt": "factory"
 }
