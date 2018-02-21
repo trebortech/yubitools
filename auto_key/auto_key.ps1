@@ -259,12 +259,6 @@ Function Get-USB {
 
 function log-results($serialnumber, $pivsecuredata, $pivcleardata, $otpsecuredata="", $otpcleardata="")
 {
-    # Need to encrypt pivsecuredata
-    $pivsecuredata = Encrypt-String $pivsecuredata $script:passphrase
-    # Need to encrypt otpsecuredata
-
-    $otpsecuredata = Encrypt-String $pivsecuredata $script:passphrase
-    
     $logdate = get-date
     $logdate = $logdate.tostring()
 
@@ -295,98 +289,11 @@ Function get-password($len, $type=''){
     return $result    
 }
 
-function Encrypt-String($String, $Passphrase, $salt=$script:salt, $init=$script:init, [switch]$arrayOutput) 
-{ 
-    # Create a COM Object for RijndaelManaged Cryptography 
-    $r = new-Object System.Security.Cryptography.RijndaelManaged 
-    # Convert the Passphrase to UTF8 Bytes 
-    $pass = [Text.Encoding]::UTF8.GetBytes($Passphrase) 
-    # Convert the Salt to UTF Bytes 
-    $salt = [Text.Encoding]::UTF8.GetBytes($salt) 
- 
-    # Create the Encryption Key using the passphrase, salt and SHA1 algorithm at 256 bits 
-    $r.Key = (new-Object Security.Cryptography.PasswordDeriveBytes $pass, $salt, "SHA1", 5).GetBytes(32) #256/8 
-    # Create the Intersecting Vector Cryptology Hash with the init 
-    $r.IV = (new-Object Security.Cryptography.SHA1Managed).ComputeHash( [Text.Encoding]::UTF8.GetBytes($init) )[0..15] 
-     
-    # Starts the New Encryption using the Key and IV    
-    $c = $r.CreateEncryptor() 
-    # Creates a MemoryStream to do the encryption in 
-    $ms = new-Object IO.MemoryStream 
-    # Creates the new Cryptology Stream --> Outputs to $MS or Memory Stream 
-    $cs = new-Object Security.Cryptography.CryptoStream $ms,$c,"Write" 
-    # Starts the new Cryptology Stream 
-    $sw = new-Object IO.StreamWriter $cs 
-    # Writes the string in the Cryptology Stream 
-    $sw.Write($String) 
-    # Stops the stream writer 
-    $sw.Close() 
-    # Stops the Cryptology Stream 
-    $cs.Close() 
-    # Stops writing to Memory 
-    $ms.Close() 
-    # Clears the IV and HASH from memory to prevent memory read attacks 
-    $r.Clear() 
-    # Takes the MemoryStream and puts it to an array 
-    [byte[]]$result = $ms.ToArray() 
-    # Converts the array from Base 64 to a string and returns 
-    return [Convert]::ToBase64String($result) 
-} 
-
-function Decrypt-String($Encrypted, $Passphrase, $salt=$script:salt, $init=$script:init) 
-{ 
-    # If the value in the Encrypted is a string, convert it to Base64 
-    if($Encrypted -is [string]){ 
-        $Encrypted = [Convert]::FromBase64String($Encrypted) 
-       } 
- 
-    # Create a COM Object for RijndaelManaged Cryptography 
-    $r = new-Object System.Security.Cryptography.RijndaelManaged 
-    # Convert the Passphrase to UTF8 Bytes 
-    $pass = [Text.Encoding]::UTF8.GetBytes($Passphrase) 
-    # Convert the Salt to UTF Bytes 
-    $salt = [Text.Encoding]::UTF8.GetBytes($salt) 
- 
-    # Create the Encryption Key using the passphrase, salt and SHA1 algorithm at 256 bits 
-    $r.Key = (new-Object Security.Cryptography.PasswordDeriveBytes $pass, $salt, "SHA1", 5).GetBytes(32) #256/8 
-    # Create the Intersecting Vector Cryptology Hash with the init 
-    $r.IV = (new-Object Security.Cryptography.SHA1Managed).ComputeHash( [Text.Encoding]::UTF8.GetBytes($init) )[0..15] 
- 
- 
-    # Create a new Decryptor 
-    $d = $r.CreateDecryptor() 
-    # Create a New memory stream with the encrypted value. 
-    $ms = new-Object IO.MemoryStream @(,$Encrypted) 
-    # Read the new memory stream and read it in the cryptology stream 
-    $cs = new-Object Security.Cryptography.CryptoStream $ms,$d,"Read" 
-    # Read the new decrypted stream 
-    $sr = new-Object IO.StreamReader $cs 
-    # Return from the function the stream 
-    Write-Output $sr.ReadToEnd() 
-    # Stops the stream     
-    $sr.Close() 
-    # Stops the crypology stream 
-    $cs.Close() 
-    # Stops the memory stream 
-    $ms.Close() 
-    # Clears the RijndaelManaged Cryptology IV and Key 
-    $r.Clear() 
-} 
-
-
 if($sn){
     write-host "Serial Number supplied"
-    # getpassword for file
-    write-host "Password to decrypt file:"
-    $script:passphrase = read-host
-
     # get serial number line
     $keyobj = get-keyinfo $sn
-
     write-host $keyobj.pivsecuredata.trim()
-
-    #decrypt
-    $pivdata = Decrypt-String $keyobj.pivsecuredata $script:passphrase
     write-host $pivdata
     exit
 }
@@ -411,19 +318,7 @@ catch{
 write-host "**********************************************" -foregroundcolor red
 write-host "**** USE AT YOUR OWN RISK               ******" -foregroundcolor red
 write-host "**********************************************" -foregroundcolor red
-write-host "This script will create a file with the configuration passwords encrypted"
-write-host "Please enter the password that you would like to use to encrypt this file."
-write-host "*** NOTE: This password will NOT be recorded anywhere"
-write-host "*** If you forget it or misplace it you will not be able"
-write-host "*** to decrypt the exported file"
-write-host "Password:"
-$script:passphrase = read-host
-if ($script:passphrase.length -lt 10){
 
-    write-host "Password must be atleast 10 characters long"
-    write-host "Please start over"
-    exit
-}
 write-host "*************  WARNING  **********************" -foregroundcolor red
 write-host "This will reset the Yubikey that is currently connected."
 write-host "Do you want to continue?"
