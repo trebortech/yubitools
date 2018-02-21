@@ -21,9 +21,6 @@ $script:keystatus = 'out'
 $script:pinretries = 6
 $script:pukretries = 6
 $script:debug = $False
-$script:passphrase = ''
-$script:salt = 'vvculgkkgjjeicilljrrigrnbfjlb'
-$script:init = 'dvcdjfigdjuuihnedkfhfbltbirrjvjcvnd'
 $runloop = $True
 
 function get-keyinfo([int]$getserialnumber){
