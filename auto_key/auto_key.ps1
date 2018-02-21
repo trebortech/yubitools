@@ -12,7 +12,7 @@ param(
     [string]$sn = ""
     )
 
-$env:PATH = "C:\Program Files (x86)\Yubico\YubiKey Manager"
+$env:PATH += ";C:\Program Files (x86)\Yubico\YubiKey Manager"
 
 $script:defaultPIN = '123456'
 $script:defaultPUK = '12345678'
