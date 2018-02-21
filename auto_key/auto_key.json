@@ -1,7 +1,38 @@
 {
-    "pinretries": 6,
-    "pukretries": 6,
-    "defaultpin": "serial",
-    "defaultpuk": "random",
-    "defaultmgt": "factory"
+    "debug": "True",
+    "mode": "OTP+U2F+CCID",
+    "slot1": {
+        "type": "otp",
+        "publicid": "serial",
+        "privateid": "random",
+        "secretkey": "random"
+    },
+    "oath": {
+        "mynewkey": {
+            "type": "totp",
+            "digits": 6,
+            "algorithm": "sha256",
+            "counter": 0,
+            "issuer" : "Google",
+            "period": 30,
+            "touch": "True",
+            "secret": ""
+        },
+        "myotherkey": {
+
+        }
+    },
+    "openpgp": {
+        "pinretries": 6,
+        "authkey": {"touchpolicy": "off"},
+        "sigkey": {"touchpolicy": "off"},
+        "enckey": {"touchpolicy": "off"}
+    },
+    "ccid": {
+        "pinretries": 5,
+        "pukretries": 3,
+        "defaultpin": "serial",
+        "defaultpuk": "random",
+        "defaultmgt": "factory"
+    }
 }
