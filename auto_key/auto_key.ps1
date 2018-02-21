@@ -1,3 +1,13 @@
+##############################
+#
+# NOT FOR PRODUCTION USE
+#
+# REFERENCE CODE ONLY
+#
+# USE AT YOUR OWN RISK!!!!!!
+#
+##############################
+
 param(
     [string]$sn = ""
     )
@@ -398,14 +408,15 @@ catch{
     break
 }
 
-write-host "**********************************************"
-write-host "This script will create a file with the "
-write-host "configuration passwords encrypted"
-write-host "Please enter the password that you would"
-write-host "like to use to encrypt this file."
+write-host "**********************************************" -foregroundcolor red
+write-host "**** USE AT YOUR OWN RISK               ******" -foregroundcolor red
+write-host "**********************************************" -foregroundcolor red
+write-host "This script will create a file with the configuration passwords encrypted"
+write-host "Please enter the password that you would like to use to encrypt this file."
 write-host "*** NOTE: This password will NOT be recorded anywhere"
 write-host "*** If you forget it or misplace it you will not be able"
 write-host "*** to decrypt the exported file"
+write-host "Password:"
 $script:passphrase = read-host
 if ($script:passphrase.length -lt 10){
 
