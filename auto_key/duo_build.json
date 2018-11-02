@@ -1,0 +1,10 @@
+{
+    "debug": "False",
+    "mode": "OTP+FIDO+CCID",
+    "slot1": {
+        "type": "otp",
+        "publicid": "serial",
+        "privateid": "random",
+        "secretkey": "random"
+    }
+}
