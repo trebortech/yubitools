@@ -14,34 +14,6 @@ $script:debug = $False
 
 $runloop = $True
 
-function get-keyinfo([int]$getserialnumber){
-
-    $ykobj = @{}
-    $logfile = get-content 'auto_key_results.csv' -raw 
-    $lines = $logfile -split "\n"
-
-    foreach($line in $lines){
-        $lineobj = $line -split "\|"
-        $serialnumber = [int]$lineobj[0]
-        if ($serialnumber){
-            if ($ykobj[$serialnumber]){
-                write-host "Found it"
-            }
-            else
-            {
-                $linearr = @{
-                    logdate = $lineobj[1]
-                    pivsecuredata = $lineobj[2]
-                }
-                $ykobj[$serialnumber] = $linearr
-            }
-        }
-    }
-
-    return $ykobj.item($getserialnumber)
-}
-
-
 
 Function config_key {
     
@@ -53,7 +25,7 @@ Function config_key {
 
     $serialnumber = $ykInfo[1].trim()
 
-    $config = get-content 'auto_key_duo.json' | out-string | convertfrom-json
+    $config = get-content 'duo_build.json' | out-string | convertfrom-json
 
     if ($config.debug){
         $script:debug = $config.debug
