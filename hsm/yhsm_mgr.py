@@ -19,8 +19,8 @@ import getpass
 import yubihsm.exceptions
 
 from yubihsm import YubiHsm
-from yubihsm.objects import AuthenticationKey
-from yubihsm.defs import CAPABILITY
+from yubihsm.objects import AuthenticationKey, AsymmetricKey
+from yubihsm.defs import CAPABILITY, ALGORITHM
 
 # Supporting Class
 
@@ -40,11 +40,23 @@ class bcolors:
     Default = '\033[99m'
 
 
+objHSM = ""
+
+'''
+authid = 1
+serverip = "192.168.2.118"
+port = "12345"
+password = "password"
+hsm = YubiHsm.connect("http://{0}:{1}/connector/api".format(serverip, port))
+session = hsm.create_session_derived(authid, password)
+'''
 
 def _session(authid=1, serverip="127.0.0.1", port="12345", password="password"):
     '''
     Create an authenticated session to the YubiHSM connector
     '''
+    global objHSM
+
     try:
         hsm = YubiHsm.connect("http://{0}:{1}/connector/api".format(serverip, port))
         session = hsm.create_session_derived(authid, password)
@@ -54,35 +66,100 @@ def _session(authid=1, serverip="127.0.0.1", port="12345", password="password"):
     except yubihsm.exceptions.YubiHsmConnectionError:
         message = bcolors.Red + "No route to host" + bcolors.ENDC
         login(message)
-    return (hsm, session)
+    except yubihsm.exceptions.YubiHsmDeviceError:
+        message = bcolors.Red + "Login faile 2" + bcolors.ENDC
+        login(message)
+
+    objHSM = {"hsm": hsm, "session": session}
+    return True
 
 def reset_hardware():
     '''
     Reset the YubiHSM to factory defaults
     '''
-
-    return 'completed'
+    session = objHSM['session']
+    try:
+        session.reset_device()
+        message = bcolors.Green + " Device has been reset. You must login again."
+        login()
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
+    return True
 
 def list_objects():
     '''
     List all the objects for a domain
     '''
-    return 'completed'
+    session = objHSM['session']
 
-def deviceinfo(hsm):
+    objslist = session.list_objects()
+
+    for objlist in objslist:
+        obj = objlist.get_info()
+
+        print ("ID: " + str(obj.id))
+        print ("Label: " + obj.label)
+        print ("Domains: " + str(obj.domains))
+        print ("Type: " + str(obj.object_type))
+        print ("----------------------------")
+    
+    print("Press C to continue or Q to exit")
+    choice = input().lower()
+    if choice == "c":
+        menu()
+    elif choice == "q":
+        exit()
+
+def deviceinfo():
     '''
     Get the device information
     '''
+    hsm = objHSM['hsm']
     print(hsm.get_device_info().serial)
     print("")
     print("Press C to continue or Q to exit")
     choice = input().lower()
     if choice == "c":
-        menu(hsm)
+        menu()
     elif choice == "q":
         exit()
 
-def create_auth(session):
+def create_asymm():
+    os.system('clear')
+    print (bcolors.Yellow + "***********   Create Asymmetric Key Pair for signing operations  ***************" + bcolors.ENDC)
+    print ("What would you like for an object ID (0 = auto creates):")
+    object_id = int(input())
+    print ("What domains should this be assigned to:")
+    domains = int(input())
+    print ("What label would you like to set:")
+    # TODO: Needs to be no longer than 40 bytes
+    label = input()
+
+    capabilities = CAPABILITY.SIGN_ECDSA
+    algorithm = ALGORITHM.EC_P256
+
+    try:
+        session = objHSM['session']
+        key = AsymmetricKey.generate(session, object_id, label, domains, capabilities, algorithm)
+    except yubihsm.exceptions.YubiHsmDeviceError:
+        print("Error")
+
+    print("Created new Asymmetric key pair")
+    print("Name: " + label)
+    print("ID: " + str(key.id))
+    print("")
+    print("Press C to continue or Q to exit")
+    choice = input().lower()
+    if choice == "c":
+        menu()
+    elif choice == "q":
+        exit()
+
+
+
+
+def create_auth():
 
     os.system('clear')
     print (bcolors.Yellow + "***********   Create Authorization Key   ***************" + bcolors.ENDC)
@@ -96,9 +173,13 @@ def create_auth(session):
 
     capabilities = CAPABILITY.ALL
     delegated_capabilities = CAPABILITY.ALL
-    password = "YubiHSMTestPassword"
-
-    key = AuthenticationKey.put_derived(session, object_id, label, domains, capabilities, delegated_capabilities, password)
+    
+    try:
+        session = objHSM['session']
+        key = AuthenticationKey.put_derived(session, object_id, label, domains, capabilities, delegated_capabilities, password)
+    except yubihsm.exceptions.YubiHsmDeviceError:
+        message = bcolors.Red + " Ojbect already exists " + bcolors.ENDC
+        menu(message)
 
 
     print("Created new Auth key")
@@ -108,7 +189,7 @@ def create_auth(session):
     print("Press C to continue or Q to exit")
     choice = input().lower()
     if choice == "c":
-        menu(hsm)
+        menu()
     elif choice == "q":
         exit()
 
@@ -129,30 +210,39 @@ def login(message=''):
     authid = int(input())
     password = getpass.getpass()
 
-    hsm, session = _session(authid, serverip, port, password)
+    connected = _session(authid, serverip, port, password)
 
-    if(hsm):
-        menu(hsm, session)
+    if(connected):
+        menu()
     else:
         message = bcolors.Red + "Failed to connect. Please login again" + bcolors.ENDC
         login(message)
     
     return
 
-def menu(hsm, session):
+def menu(message=''):
 
     os.system('clear')
+    print (message)
     print ("1 - Device info")
     print ("2 - Create Auth Key")
+    print ("3 - Create signing cert")
+    print ("4 - List Objects")
     print ("10 - Reset device")
+    print("")
+    print("Press C to continue or Q to exit")
 
     choice = input().lower()
     if choice == "1":
-        deviceinfo(hsm)
+        deviceinfo()
     elif choice == "2":
-        create_auth(session)
+        create_auth()
+    elif choice == "3":
+        create_asymm()
+    elif choice == "4":
+        list_objects()
     elif choice == "10":
-        reset_hardware(session)
+        reset_hardware()
     elif choice == 'q':
         exit()
 
@@ -170,7 +260,7 @@ def yubihsmloop(message=''):
     elif choice == "2":
         set_config_path()
         yubihsmloop()
-    elif choice == "'q":
+    elif choice == "q":
         exit()
     else:
         yubihsmloop(bcolors.Red + "That's an invalid option. Please select a valid option" + bcolors.ENDC)
