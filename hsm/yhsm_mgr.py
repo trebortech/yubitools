@@ -269,9 +269,10 @@ def sign_data_hmac():
         hmackey = HmacKey(session, keyid)
         datafile = open(datafilename, 'rb').read()
         signature = hmackey.sign_hmac(datafile)
-        dataout = open(datafilename + ".sig", "w")
+        dataout = open(datafilename + "-" + str(keyid) +".sig", "+w")
         dataout.write(signature.hex())
         dataout.close()
+        menu("File has been created with signature in it for " + datafilename)
     except yubihsm.exceptions.YubiHsmDeviceError:
         menu("Failed signing")
     menu()
