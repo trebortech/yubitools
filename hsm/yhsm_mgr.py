@@ -94,7 +94,7 @@ except ImportError:
 
 
 # Global variables
-objHSM = ""
+objHSM = {}
 currconnection = {}
 working_dir = ""
 
@@ -138,8 +138,9 @@ def reset_hardware():
     '''
     Reset the YubiHSM to factory defaults
     '''
+    global objHSM
     status_message()
-    session = objHSM['session']
+
     print(bcolors.Red + ("*"*40) + bcolors.ENDC)
     print(bcolors.Red + ("**") + bcolors.ENDC + " YOU ARE ABOUT TO RESET THE YUBIHSM ")
     print(bcolors.Red + ("**") + bcolors.ENDC + " ARE YOU SURE YOU WANT TO DO THIS? Y/N ")
@@ -165,9 +166,10 @@ def reset_hardware():
         return False
 
     try:
+        session = objHSM['session']
         session.reset_device()
         message = bcolors.Green + " Device has been reset. You must login again."
-        objHSM = ""
+        objHSM = {}
         currconnection = {}
         yubihsmloop()
     except yubihsm.exceptions.YubiHsmInvalidResponseError:
@@ -439,8 +441,6 @@ def config_import(configfile="yhsm_mgr.json"):
     if not(os.path.isfile(configfile)):
         with open(configfile, "w") as fp:
             json.dump(defaultconfig, fp)
-
-    #TODO: Change working directory
     config = json.load(open(configfile))
     return 
 
