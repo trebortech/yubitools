@@ -13,11 +13,12 @@
 
 
 Coming features
-- Banner that provides information on YubiHSM connected to
+- DONE - Banner that provides information on YubiHSM connected to
 - Support for json configuration file
 --- DONE - YubiHSM available connections
 --- DONE - Capability grouping with alias
-- Hashing of file 
+- DONE - HMAC Hashing of file 
+- DONE - Create HMAC key
 - Verify hash of file
 - Opaque object storage
 - PRNG value
@@ -48,7 +49,6 @@ class bcolors:
     Black = '\033[90m'
     Default = '\033[99m'
 
-
 # Library imports
 import json
 import os
@@ -59,6 +59,9 @@ import random
 import string
 
 from hashlib import sha256
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 # Check if windows and import colorama is Windows
 
@@ -108,6 +111,48 @@ defaultconfig = {
     }
 }
 
+def _hsmdomains(domains):
+    
+    domainslist = domains.split(",")
+    set(domainslist)
+
+    domains = {
+        1:1 << 0x00,
+        2:1 << 0x01,
+        3:1 << 0x02,
+        4:1 << 0x03,
+        5:1 << 0x04,
+        6:1 << 0x05,
+        7:1 << 0x06,
+        8:1 << 0x07,
+        9:1 << 0x08,
+        10:1 << 0x09,
+        11:1 << 0x0a,
+        12:1 << 0x0b,
+        13:1 << 0x0c,
+        14:1 << 0x0d,
+        15:1 << 0x0e,
+        16:1 << 0x0f
+    }
+
+    domaintotal = 0
+    for i in domainslist:
+        domaintotal = domaintotal + domains[int(i)]
+
+    return domaintotal
+
+def _hsmtodomains(domainint):
+    bitstring = "{0:b}".format(domainint)
+    retdomain = []
+    position = len(bitstring)
+    for i in bitstring:
+        if int(i) == 1:
+            retdomain.append(position)
+        position -= 1
+
+    return set(retdomain)
+
+
 def _randstring(str_size=5):
     allowed_chars = string.ascii_letters + string.punctuation
     return ''.join(random.choice(allowed_chars) for x in range(str_size))
@@ -123,23 +168,115 @@ def _session(authid=1, serverip="127.0.0.1", port="12345", password="password"):
         session = hsm.create_session_derived(authid, password)
     except yubihsm.exceptions.YubiHsmAuthenticationError:
         message = bcolors.Red + "Login failed" + bcolors.ENDC
-        login(message)
+        return (False, message)
     except yubihsm.exceptions.YubiHsmConnectionError:
         message = bcolors.Red + "No route to host" + bcolors.ENDC
-        login(message)
+        return (False, message)
     except yubihsm.exceptions.YubiHsmDeviceError:
         message = bcolors.Red + "Login failed 2" + bcolors.ENDC
-        login(message)
+        return (False, message)
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + "Response error" + bcolors.ENDC
+        return (False, message)
 
     objHSM = {"hsm": hsm, "session": session}
-    return True
+    message = bcolors.Green + "Successful Login" + bcolors.ENDC
+    return (True, message)
+
+
+def _status_message():
+    '''
+    Provide connection information
+    '''
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(bcolors.Green + ("*"*40) + bcolors.ENDC)
+    print(bcolors.Green + ("*"*5) + bcolors.ENDC)
+    if len(currconnection):
+        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Connected YubiHSM:" +  currconnection['connector']['serverip'])
+        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Auth ID: " + str(currconnection['connector']['authid']))
+    else:
+        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Connected YubiHSM:")
+        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Auth ID: ")
+    
+    print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Current Working Directory: " + working_dir)
+    print(bcolors.Green + ("*"*5) + bcolors.ENDC)
+    print(bcolors.Green + ("*"*40) + bcolors.ENDC)
+
+    return 
+
+def _login(message='', configname='', *args, **kwargs):
+    '''
+    Gather login information from user
+    '''
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+    print (message)
+    if configname:
+        # Use information from configuration file
+        serverip = config['hsms'][configname]['serverip'] 
+        port = config['hsms'][configname]['port']
+        authid = int(config['hsms'][configname]['authid'])
+
+        print(f"Connection to http://{serverip}:{port} using auth id {authid}")
+    else:    
+        # User needs to provide all the information for login
+        print ("YubiHSM Connector IP: ")
+        serverip = input().lower()
+        print ("Port number:")
+        port = input().lower()
+        print ("User ID #:")
+        authid = int(input())
+    
+    password = getpass.getpass("Password to auth id (will not echo to screen):")
+
+    currconnection['connector'] = {"serverip": serverip, "port": port, "authid": authid}
+
+    connected = _session(authid, serverip, port, password)
+    if(connected[0]):
+        menu(connected[1])
+    else: 
+        _login(connected[1], configname)
+    return
+
+def _config_import(configfile="yhsm_mgr.json"):
+    global config
+    global working_dir
+    
+    if len(working_dir) == 0:
+        working_dir = os.getcwd()
+
+    if not(os.path.isfile(configfile)):
+        with open(configfile, "w") as fp:
+            json.dump(defaultconfig, fp)
+    config = json.load(open(configfile))
+    return 
+
+def _set_config_path():
+    global working_dir
+    print (bcolors.Green + "********** Set working directory ****************" + bcolors.ENDC)
+    working_dir = input("Change working directory to (must already exist):").strip()
+    
+    if working_dir[:1] == "+":
+        working_dir = os.getcwd() + working_dir[1:]
+
+    if (not os.path.isdir(working_dir)):
+        print (bcolors.Red + "PATH DOES NOT EXIST" + bcolors.ENDC)
+    else:
+        os.chdir(working_dir)
+    _config_import()
+    return
+
+#******************************************************************************
+#***              DEVICE SECTION
+#******************************************************************************
+
 
 def reset_hardware():
     '''
     Reset the YubiHSM to factory defaults
     '''
     global objHSM
-    status_message()
+    _status_message()
 
     print(bcolors.Red + ("*"*40) + bcolors.ENDC)
     print(bcolors.Red + ("**") + bcolors.ENDC + " YOU ARE ABOUT TO RESET THE YUBIHSM ")
@@ -177,74 +314,67 @@ def reset_hardware():
         menu(message)
     return True
 
-def status_message():
-    '''
-    Provide connection information
-    '''
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print(bcolors.Green + ("*"*40) + bcolors.ENDC)
-    print(bcolors.Green + ("*"*5) + bcolors.ENDC)
-    if len(currconnection):
-        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Connected YubiHSM:" +  currconnection['connector']['serverip'])
-        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  User ID: " + str(currconnection['connector']['authid']))
-    else:
-        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Connected YubiHSM:")
-        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  User ID: ")
-    
-    print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Current Working Directory: " + working_dir)
-    print(bcolors.Green + ("*"*5) + bcolors.ENDC)
-    print(bcolors.Green + ("*"*40) + bcolors.ENDC)
-
-    return 
-
-    
 def list_objects():
     '''
     List all the objects for a domain
     '''
-    status_message()
+    _status_message()
     session = objHSM['session']
 
-    objslist = session.list_objects()
+    try:
+        objslist = session.list_objects()
 
-    for objlist in objslist:
-        obj = objlist.get_info()
+        for objlist in objslist:
+            obj = objlist.get_info()
 
-        print (bcolors.Green + "ID: " + bcolors.ENDC + str(obj.id))
-        print (bcolors.Green + "Label: " + bcolors.ENDC + obj.label )
-        print (bcolors.Green + "Domains: " + bcolors.ENDC + str(obj.domains))
-        print (bcolors.Green + "Type: " + bcolors.ENDC +  str(obj.object_type))
-        print ("----------------------------")
-    
-    print("Press C to continue or Q to exit")
-    choice = input().lower()
-    if choice == "c":
-        menu()
-    elif choice == "q":
-        exit()
+            print (bcolors.Green + "ID: " + bcolors.ENDC + str(obj.id))
+            print (bcolors.Green + "Label: " + bcolors.ENDC + obj.label )
+            print (bcolors.Green + "Domains: " + bcolors.ENDC + str(_hsmtodomains(obj.domains)))
+            print (bcolors.Green + "Type: " + bcolors.ENDC +  str(obj.object_type))
+            print ("----------------------------")
+        
+        print("Press C to continue or Q to exit")
+        choice = input().lower()
+        if choice == "c":
+            menu()
+        elif choice == "q":
+            exit()
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
 
 def deviceinfo():
     '''
     Get the device information
     '''
-    status_message()
+    _status_message()
     hsm = objHSM['hsm']
-    serialnumber = hsm.get_device_info().serial
-    version = hsm.get_device_info().version
-    print("")
-    print("Device Information")
-    print(bcolors.Green + "Serial number:" + bcolors.ENDC + str(serialnumber))
-    print(bcolors.Green + "YubiHSM Version:" + bcolors.ENDC + str(version))
-    print("")
-    print("Press C to continue or Q to exit")
-    choice = input().lower()
-    if choice == "c":
-        menu()
-    elif choice == "q":
-        exit()
+    try:
+        serialnumber = hsm.get_device_info().serial
+        version = hsm.get_device_info().version
+        print("")
+        print("Device Information")
+        print(bcolors.Green + "Serial number:" + bcolors.ENDC + str(serialnumber))
+        print(bcolors.Green + "YubiHSM Version:" + bcolors.ENDC + str(version))
+        print("")
+        print("Press C to continue or Q to exit")
+        choice = input().lower()
+        if choice == "c":
+            menu()
+        elif choice == "q":
+            exit()
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
+
+
+#******************************************************************************
+#***              SIGN SECTION
+#******************************************************************************
+
 
 def sign_data_hmac():
-    status_message()
+    _status_message()
     print (bcolors.Green + "***********   Sign Data  ***************" + bcolors.ENDC)
     # List available key
     session = objHSM['session']
@@ -275,88 +405,91 @@ def sign_data_hmac():
         dataout.write(signature.hex())
         dataout.close()
         menu("File has been created with signature in it for " + datafilename)
-    except yubihsm.exceptions.YubiHsmDeviceError:
-        menu("Failed signing")
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
     menu()
     return
 
-def create_hmac():
-    status_message()
-    print (bcolors.Green + "***********   Create HMAC Key  ***************" + bcolors.ENDC)
-    print ("What would you like for an object ID (0 = auto creates):")
-    object_id = int(input())
-    print ("What domains should this be assigned to:")
-    domains = int(input())
-    print ("What label would you like to set:")
-    # TODO: Needs to be no longer than 40 bytes
-    label = input()
 
+#******************************************************************************
+#***              CREATE SECTION
+#******************************************************************************
+
+def create_hmac():
+    _status_message()
+    print (bcolors.Green + "***********   Create HMAC Key  ***************" + bcolors.ENDC)
+    object_id = int(input("What would you like for an object ID (0 = auto creates):"))
+    domains = input("What domains should this be assigned to:")
+    label = input("What label would you like to set:")[:19]
+
+    domainint = _hsmdomains(domains)
     # sign hmac + verify hmac
     capabilities = 12582912
     algorithm = ALGORITHM.HMAC_SHA256
 
     try:
         session = objHSM['session']
-        key = HmacKey.generate(session, object_id, label, domains, capabilities, algorithm)
+        key = HmacKey.generate(session, object_id, label, domainint, capabilities, algorithm)
+    
+        print("Created new HMAC key")
+        print("Name: " + label)
+        print("ID: " + str(key.id))
+        print("Press C to continue or Q to exit")
+        choice = input().lower()
+        if choice == "c":
+            menu()
+        elif choice == "q":
+            exit()
     except yubihsm.exceptions.YubiHsmDeviceError:
         print("Error")
-
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
     
-    print("Created new HMAC key")
-    print("Name: " + label)
-    print("ID: " + str(key.id))
-    print("Press C to continue or Q to exit")
-    choice = input().lower()
-    if choice == "c":
-        menu()
-    elif choice == "q":
-        exit()
-
 def create_asymm():
-    #TODO: Support multiple domains
-    #TODO: Trim lable to 40 bytes
 
-    status_message()
+    _status_message()
     print (bcolors.Green + "***********   Create Asymmetric Key Pair for signing operations  ***************" + bcolors.ENDC)
-    print ("What would you like for an object ID (0 = auto creates):")
-    object_id = int(input())
-    print ("What domains should this be assigned to:")
-    domains = int(input())
-    print ("What label would you like to set:")
-    # TODO: Needs to be no longer than 40 bytes
-    label = input()
+    object_id = int(input("What would you like for an object ID (0 = auto creates):"))
+    domains = input("What domains should this be assigned to:")
+    label = input("What label would you like to set:")[:19]
 
+    domainint = _hsmdomains(domains)
     capabilities = CAPABILITY.SIGN_ECDSA
     algorithm = ALGORITHM.EC_P256
 
     try:
         session = objHSM['session']
-        key = AsymmetricKey.generate(session, object_id, label, domains, capabilities, algorithm)
+        key = AsymmetricKey.generate(session, object_id, label, domainint, capabilities, algorithm)
+    
+        print("Created new Asymmetric key pair")
+        print("Name: " + label)
+        print("ID: " + str(key.id))
+        print("")
+        print("Press C to continue or Q to exit")
+        choice = input().lower()
+        if choice == "c":
+            menu()
+        elif choice == "q":
+            exit()
     except yubihsm.exceptions.YubiHsmDeviceError:
         print("Error")
-
-    print("Created new Asymmetric key pair")
-    print("Name: " + label)
-    print("ID: " + str(key.id))
-    print("")
-    print("Press C to continue or Q to exit")
-    choice = input().lower()
-    if choice == "c":
-        menu()
-    elif choice == "q":
-        exit()
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
+    
 
 def create_auth():
 
-    status_message()
+    _status_message()
     print (bcolors.Green + "***********   Create Authorization Key   ***************" + bcolors.ENDC)
     object_id = int(input("What would you like for an object ID (0 = auto creates):   "))
     domains = input("What domains should this be assigned to:  ")
-    label = input("What label would you like to set:  ")
+    label = input("What label would you like to set:  ")[:19]
     password = getpass.getpass("What password would you like to set (will not echo to screen):  ")
 
-    domainslist = domains.split(",")
-    set(domainslist)
+    domainint = _hsmdomains(domains)
 
     print ("Available Capability settings")
     itemnum = 1
@@ -374,89 +507,94 @@ def create_auth():
     
     try:
         session = objHSM['session']
-        key = AuthenticationKey.put_derived(session, object_id, label, domains, capabilities, delegated_capabilities, password)
+        key = AuthenticationKey.put_derived(session, object_id, label, domainint, capabilities, delegated_capabilities, password)
+    
+        print("Created new Auth key")
+        print("Name: " + label)
+        print("ID: " + str(key.id))
+        print("")
+        print("Press C to continue or Q to exit")
+        choice = input().lower()
+        if choice == "c":
+            menu()
+        elif choice == "q":
+            exit()
     except yubihsm.exceptions.YubiHsmDeviceError:
-        message = bcolors.Red + " Ojbect already exists " + bcolors.ENDC
+        print("Error")
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
+    
+
+#******************************************************************************
+#***              IMPORT SECTION
+#******************************************************************************
+
+def upload_asymm():
+
+    _status_message()
+    print (bcolors.Green + "***********   Import Asymmetric Private Key   ***************" + bcolors.ENDC)
+    object_id = int(input("What would you like for an object ID (0 = auto creates):   "))
+    domains = input("What domains should this be assigned to:  ")
+    label = input("What label would you like to set:  ")[:19]
+    filename = input("What is the name of the file to import:")
+    print ("Available Capability settings")
+    itemnum = 1
+    itemlist = {}
+    for cap in config['cap_alias']:
+        print(str(itemnum) + " - " + cap)
+        itemlist[itemnum] = cap
+        itemnum += 1
+    selcap = input("Which capability set would you like to use:  ")
+
+    selconfig = itemlist[int(selcap)]
+
+    capabilities = config['cap_alias'][selconfig]
+    domainint = _hsmdomains(domains)
+
+    pemfile = open(filename, 'rb')
+    pemlines = pemfile.read()
+    pemfile.close()
+
+    privatekey = load_pem_private_key(pemlines, None, default_backend())
+    
+    try:
+        session = objHSM['session']
+        key = AsymmetricKey.put(session, object_id, label, domainint, capabilities, privatekey)
+        print("Name: " + label)
+        print("ID: " + str(key.id))
+        print("")
+        print("Press C to continue or Q to exit")
+        choice = input().lower()
+        if choice == "c":
+            menu()
+        elif choice == "q":
+            exit()
+    except yubihsm.exceptions.YubiHsmDeviceError:
+        print("Error")
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
 
-    print("Created new Auth key")
-    print("Name: " + label)
-    print("ID: " + str(key.id))
-    print("")
-    print("Press C to continue or Q to exit")
-    choice = input().lower()
-    if choice == "c":
-        menu()
-    elif choice == "q":
-        exit()
 
-def login(message='', configname='', *args, **kwargs):
-    '''
-    Gather login information from user
-    '''
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-    if configname:
-        serverip = config['hsms'][configname]['serverip'] 
-        port = config['hsms'][configname]['port']
-        authid = int(config['hsms'][configname]['authid'])
-
-        print(f"Connection to http://{serverip}:{port} using auth id {authid}")
-    else:    
-        print (message)
-        print ("YubiHSM Connector IP: ")
-        serverip = input().lower()
-        print ("Port number:")
-        port = input().lower()
-        print ("User ID #:")
-        authid = int(input())
-    
-    password = getpass.getpass("Password to auth id (will not echo to screen):")
-
-    currconnection['connector'] = {"serverip": serverip, "port": port, "authid": authid}
-
-    connected = _session(authid, serverip, port, password)
-
-    if(connected):
-        menu()
-    else:
-        message = bcolors.Red + "Failed to connect. Please login again" + bcolors.ENDC
-        login(message)
-    
-    return
-
-
-'''
-Menu Section
-
-'''
-
-def config_import(configfile="yhsm_mgr.json"):
-    global config
-    global working_dir
-    
-    if len(working_dir) == 0:
-        working_dir = os.getcwd()
-
-    if not(os.path.isfile(configfile)):
-        with open(configfile, "w") as fp:
-            json.dump(defaultconfig, fp)
-    config = json.load(open(configfile))
-    return 
+#******************************************************************************
+#***              MENU SECTION
+#******************************************************************************
 
 def menu(message=''):
-    status_message()
+    _status_message()
     print (message)
     print ("1 - Device info")
     print ("2 - List Objects")
     print ("3 - Get Random Number")
     print ("4 - Create Auth Key")
     print ("5 - Create Asymmetric key")
-    print ("6 - Create HMAC Key")
-    print ("7 - Sign with HMAC")
+    print ("6 - Import Asymmetric key")
+    print ("7 - Create HMAC Key")
+    print ("8 - Sign with HMAC")
     print ("99 - Reset device")
     print("")
-    print("Press C to continue or Q to exit")
+    print("Press Q to exit")
 
     choice = input().lower()
     if choice == "1":
@@ -470,28 +608,20 @@ def menu(message=''):
     elif choice == "5":
         create_asymm()
     elif choice == "6":
-        create_hmac()
+        upload_asymm()
     elif choice == "7":
+        create_hmac()
+    elif choice == "8":
         sign_data_hmac()
     elif choice == "99":
         reset_hardware()
     elif choice == 'q':
         exit()
 
-def set_config_path():
-    global working_dir
-    print (bcolors.Green + "********** Set working directory ****************" + bcolors.ENDC)
-    working_dir = input("Change working directory to (must already exist):").strip()
-    if (not os.path.isdir(working_dir)):
-        print (bcolors.Red + "PATH DOES NOT EXIST" + bcolors.ENDC)
-    else:
-        os.chdir(working_dir)
-    config_import()
-    return
 
 def yubihsmloop(message=''):
-    config_import()
-    status_message()
+    _config_import()
+    _status_message()
     print (message)
     print (bcolors.Green + "********** YubiHSM Manager ****************" + bcolors.ENDC)
     print ("1 - Login")
@@ -507,14 +637,14 @@ def yubihsmloop(message=''):
 
     choice = input().lower()
     if choice == "1":
-        login()
+        _login()
         yubihsmloop()
     elif choice == "2":
-        set_config_path()
+        _set_config_path()
         yubihsmloop()
     elif int(choice) > 2:
         configname = itemlist[int(choice)]
-        login(configname=configname)
+        _login(configname=configname)
     elif choice == "q":
         exit()
     else:
