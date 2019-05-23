@@ -357,8 +357,7 @@ def deviceinfo():
         print(bcolors.Green + "Serial number:" + bcolors.ENDC + str(serialnumber))
         print(bcolors.Green + "YubiHSM Version:" + bcolors.ENDC + str(version))
         print("")
-        print("Press C to continue or Q to exit")
-        choice = input().lower()
+        choice = input("Press C to continue or Q to exit").lower()
         if choice == "c":
             menu()
         elif choice == "q":
@@ -367,6 +366,29 @@ def deviceinfo():
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
 
+def get_random():
+    '''
+    Get a random number
+    '''
+
+    _status_message()
+    try:
+        print("Pseudo random number generator")
+        intlen = input("Number of bytes requested:") 
+        session = objHSM['session']
+        prngr = session.get_pseudo_random(int(intlen))
+
+        print("")
+        print(bcolors.Green + "Generatred number:" + bcolors.ENDC + prngr.hex())
+        print("")
+        choice = input("Press C to continue or Q to exit").lower()
+        if choice == "c":
+            menu()
+        elif choice == "q":
+            exit()
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
 
 #******************************************************************************
 #***              SIGN SECTION
@@ -407,6 +429,9 @@ def sign_data_hmac():
         menu("File has been created with signature in it for " + datafilename)
     except yubihsm.exceptions.YubiHsmInvalidResponseError:
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
+    except yubihsm.exceptions.YubiHsmConnectionError:
+        message = bcolors.Red + " Connection ERROR " + bcolors.ENDC
         menu(message)
     menu()
     return
