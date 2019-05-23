@@ -17,22 +17,38 @@ Coming features
 - Support for json configuration file
 --- DONE - YubiHSM available connections
 --- DONE - Capability grouping with alias
-- DONE - HMAC Hashing of file 
+- DONE - HMAC Hashing of file
 - DONE - Create HMAC key
 - Verify hash of file
 - Opaque object storage
-- PRNG value
-- Upload Asymmetric key
+- DONE - PRNG value
+- DONE - Upload Asymmetric key
 - Backup HSM
 - Restore HSM
 - Demo script setup (start with device reset)
 - wrap data and store m of n keys on YubiKey static password
 ------ static password on yubikey is max 38 characters
 ------ wrap is larger than that and will need to be split. Slot 1 and Slot 2
+- Clean up PEP8
 
 '''
+# Library imports
+import json
+import os
+import sys
+import os.path
+import getpass
+import random
+import string
+
+from hashlib import sha256
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
 
 # Supporting Class
+
 
 class bcolors:
     WARNING = '\033[93m'
@@ -49,19 +65,6 @@ class bcolors:
     Black = '\033[90m'
     Default = '\033[99m'
 
-# Library imports
-import json
-import os
-import sys
-import os.path
-import getpass
-import random
-import string
-
-from hashlib import sha256
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 # Check if windows and import colorama is Windows
 
@@ -87,12 +90,12 @@ try:
     from yubihsm.objects import AuthenticationKey, AsymmetricKey, HmacKey
     from yubihsm.defs import CAPABILITY, ALGORITHM, OBJECT
 
-    #from ykman import driver_ccid as CCID
-
 
 except ImportError:
-    print (("*"*10) + "   This script requires the python-yubihsm library to be installed    " + ("*"*10))
-    print (("*"*10) + "   It also requires Python 3    " + ("*"*10))
+    print(("*"*10),
+          "   This script requires the python-yubihsm library to be ",
+          "installed    " + ("\*"*10))
+    print(("*"*10) + "   It also requires Python 3    " + ("*"*10))
     exit()
 
 
@@ -101,38 +104,38 @@ objHSM = {}
 currconnection = {}
 working_dir = ""
 
-#Default config settings
+# Default config settings
 defaultconfig = {
     "hsms": {
     },
     "cap_alias": {
         "sign ECDSA": 128,
-        "root auth": 140737488355327                     
+        "root auth": 140737488355327
     }
 }
 
+
 def _hsmdomains(domains):
-    
     domainslist = domains.split(",")
     set(domainslist)
 
     domains = {
-        1:1 << 0x00,
-        2:1 << 0x01,
-        3:1 << 0x02,
-        4:1 << 0x03,
-        5:1 << 0x04,
-        6:1 << 0x05,
-        7:1 << 0x06,
-        8:1 << 0x07,
-        9:1 << 0x08,
-        10:1 << 0x09,
-        11:1 << 0x0a,
-        12:1 << 0x0b,
-        13:1 << 0x0c,
-        14:1 << 0x0d,
-        15:1 << 0x0e,
-        16:1 << 0x0f
+        1: 1 << 0x00,
+        2: 1 << 0x01,
+        3: 1 << 0x02,
+        4: 1 << 0x03,
+        5: 1 << 0x04,
+        6: 1 << 0x05,
+        7: 1 << 0x06,
+        8: 1 << 0x07,
+        9: 1 << 0x08,
+        10: 1 << 0x09,
+        11: 1 << 0x0a,
+        12: 1 << 0x0b,
+        13: 1 << 0x0c,
+        14: 1 << 0x0d,
+        15: 1 << 0x0e,
+        16: 1 << 0x0f
     }
 
     domaintotal = 0
@@ -140,6 +143,7 @@ def _hsmdomains(domains):
         domaintotal = domaintotal + domains[int(i)]
 
     return domaintotal
+
 
 def _hsmtodomains(domainint):
     bitstring = "{0:b}".format(domainint)
@@ -157,7 +161,12 @@ def _randstring(str_size=5):
     allowed_chars = string.ascii_letters + string.punctuation
     return ''.join(random.choice(allowed_chars) for x in range(str_size))
 
-def _session(authid=1, serverip="127.0.0.1", port="12345", password="password"):
+
+def _session(
+            authid=1,
+            serverip="127.0.0.1",
+            port="12345",
+            password="password"):
     '''
     Create an authenticated session to the YubiHSM connector
     '''
@@ -192,17 +201,21 @@ def _status_message():
     print(bcolors.Green + ("*"*40) + bcolors.ENDC)
     print(bcolors.Green + ("*"*5) + bcolors.ENDC)
     if len(currconnection):
-        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Connected YubiHSM:" +  currconnection['connector']['serverip'])
-        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Auth ID: " + str(currconnection['connector']['authid']))
+        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Connected YubiHSM:",
+              currconnection['connector']['serverip'])
+        print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Auth ID: ",
+              str(currconnection['connector']['authid']))
     else:
         print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Connected YubiHSM:")
         print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Auth ID: ")
-    
-    print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Current Working Directory: " + working_dir)
+
+    print(bcolors.Green + ("*"*5) + bcolors.ENDC + "  Current Working ",
+          "Directory: " + working_dir)
     print(bcolors.Green + ("*"*5) + bcolors.ENDC)
     print(bcolors.Green + ("*"*40) + bcolors.ENDC)
 
-    return 
+    return
+
 
 def _login(message='', configname='', *args, **kwargs):
     '''
@@ -210,38 +223,43 @@ def _login(message='', configname='', *args, **kwargs):
     '''
     os.system('cls' if os.name == 'nt' else 'clear')
 
-    print (message)
+    print(message)
     if configname:
         # Use information from configuration file
-        serverip = config['hsms'][configname]['serverip'] 
+        serverip = config['hsms'][configname]['serverip']
         port = config['hsms'][configname]['port']
         authid = int(config['hsms'][configname]['authid'])
 
         print(f"Connection to http://{serverip}:{port} using auth id {authid}")
-    else:    
+    else:
         # User needs to provide all the information for login
-        print ("YubiHSM Connector IP: ")
+        print("YubiHSM Connector IP: ")
         serverip = input().lower()
-        print ("Port number:")
+        print("Port number:")
         port = input().lower()
-        print ("User ID #:")
+        print("User ID #:")
         authid = int(input())
-    
-    password = getpass.getpass("Password to auth id (will not echo to screen):")
 
-    currconnection['connector'] = {"serverip": serverip, "port": port, "authid": authid}
+    password = getpass.getpass(
+        "Password to auth id (will not echo to screen):")
+
+    currconnection['connector'] = {
+        "serverip": serverip,
+        "port": port,
+        "authid": authid}
 
     connected = _session(authid, serverip, port, password)
     if(connected[0]):
         menu(connected[1])
-    else: 
+    else:
         _login(connected[1], configname)
     return
+
 
 def _config_import(configfile="yhsm_mgr.json"):
     global config
     global working_dir
-    
+
     if len(working_dir) == 0:
         working_dir = os.getcwd()
 
@@ -249,26 +267,29 @@ def _config_import(configfile="yhsm_mgr.json"):
         with open(configfile, "w") as fp:
             json.dump(defaultconfig, fp)
     config = json.load(open(configfile))
-    return 
+    return
+
 
 def _set_config_path():
     global working_dir
-    print (bcolors.Green + "********** Set working directory ****************" + bcolors.ENDC)
-    working_dir = input("Change working directory to (must already exist):").strip()
-    
+    print(bcolors.Green,
+          "********** Set working directory ****************" + bcolors.ENDC)
+    working_dir = input(
+        "Change working directory to (must already exist):").strip()
+
     if working_dir[:1] == "+":
         working_dir = os.getcwd() + working_dir[1:]
 
     if (not os.path.isdir(working_dir)):
-        print (bcolors.Red + "PATH DOES NOT EXIST" + bcolors.ENDC)
+        print(bcolors.Red + "PATH DOES NOT EXIST" + bcolors.ENDC)
     else:
         os.chdir(working_dir)
     _config_import()
     return
 
-#******************************************************************************
-#***              DEVICE SECTION
-#******************************************************************************
+# ******************************************************************************
+# ***              DEVICE SECTION
+# ******************************************************************************
 
 
 def reset_hardware():
@@ -279,8 +300,10 @@ def reset_hardware():
     _status_message()
 
     print(bcolors.Red + ("*"*40) + bcolors.ENDC)
-    print(bcolors.Red + ("**") + bcolors.ENDC + " YOU ARE ABOUT TO RESET THE YUBIHSM ")
-    print(bcolors.Red + ("**") + bcolors.ENDC + " ARE YOU SURE YOU WANT TO DO THIS? Y/N ")
+    print(bcolors.Red + ("**") + bcolors.ENDC,
+          " YOU ARE ABOUT TO RESET THE YUBIHSM ")
+    print(bcolors.Red + ("**") + bcolors.ENDC,
+          " ARE YOU SURE YOU WANT TO DO THIS? Y/N ")
     print(bcolors.Red + ("*"*40) + bcolors.ENDC)
     choice = input().lower()
 
@@ -288,8 +311,10 @@ def reset_hardware():
         passcode = _randstring()
 
         print(bcolors.Red + ("*"*40) + bcolors.ENDC)
-        print(bcolors.Red + ("**") + bcolors.ENDC + " ARE YOU SURE? ")
-        print(bcolors.Red + ("**") + bcolors.ENDC + " Type the following code if you want to continue: " + passcode)
+        print(bcolors.Red + ("**") + bcolors.ENDC,
+              " ARE YOU SURE? ")
+        print(bcolors.Red + ("**") + bcolors.ENDC,
+              " Type the following code if you want to continue: " + passcode)
         print(bcolors.Red + ("*"*40) + bcolors.ENDC)
         choice2 = input()
 
@@ -305,7 +330,9 @@ def reset_hardware():
     try:
         session = objHSM['session']
         session.reset_device()
-        message = bcolors.Green + " Device has been reset. You must login again."
+        message = bcolors.Green,
+        " Device has been reset. You must login again.",
+        bcolors.ENDC
         objHSM = {}
         currconnection = {}
         yubihsmloop()
@@ -313,6 +340,7 @@ def reset_hardware():
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
     return True
+
 
 def list_objects():
     '''
@@ -327,12 +355,14 @@ def list_objects():
         for objlist in objslist:
             obj = objlist.get_info()
 
-            print (bcolors.Green + "ID: " + bcolors.ENDC + str(obj.id))
-            print (bcolors.Green + "Label: " + bcolors.ENDC + obj.label )
-            print (bcolors.Green + "Domains: " + bcolors.ENDC + str(_hsmtodomains(obj.domains)))
-            print (bcolors.Green + "Type: " + bcolors.ENDC +  str(obj.object_type))
-            print ("----------------------------")
-        
+            print(bcolors.Green + "ID: " + bcolors.ENDC + str(obj.id))
+            print(bcolors.Green + "Label: " + bcolors.ENDC + obj.label)
+            print(bcolors.Green + "Domains: " + bcolors.ENDC,
+                  str(_hsmtodomains(obj.domains)))
+            print(bcolors.Green + "Type: " + bcolors.ENDC,
+                  str(obj.object_type))
+            print("----------------------------")
+
         print("Press C to continue or Q to exit")
         choice = input().lower()
         if choice == "c":
@@ -342,6 +372,7 @@ def list_objects():
     except yubihsm.exceptions.YubiHsmInvalidResponseError:
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
+
 
 def deviceinfo():
     '''
@@ -354,7 +385,8 @@ def deviceinfo():
         version = hsm.get_device_info().version
         print("")
         print("Device Information")
-        print(bcolors.Green + "Serial number:" + bcolors.ENDC + str(serialnumber))
+        print(bcolors.Green + "Serial number:" + bcolors.ENDC,
+              str(serialnumber))
         print(bcolors.Green + "YubiHSM Version:" + bcolors.ENDC + str(version))
         print("")
         choice = input("Press C to continue or Q to exit").lower()
@@ -366,6 +398,7 @@ def deviceinfo():
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
 
+
 def get_random():
     '''
     Get a random number
@@ -374,12 +407,13 @@ def get_random():
     _status_message()
     try:
         print("Pseudo random number generator")
-        intlen = input("Number of bytes requested:") 
+        intlen = input("Number of bytes requested:")
         session = objHSM['session']
         prngr = session.get_pseudo_random(int(intlen))
 
         print("")
-        print(bcolors.Green + "Generatred number:" + bcolors.ENDC + prngr.hex())
+        print(bcolors.Green,
+              "Generatred number:" + bcolors.ENDC + prngr.hex())
         print("")
         choice = input("Press C to continue or Q to exit").lower()
         if choice == "c":
@@ -390,14 +424,15 @@ def get_random():
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
 
-#******************************************************************************
-#***              SIGN SECTION
-#******************************************************************************
+# ******************************************************************************
+# ***              SIGN SECTION
+# ******************************************************************************
 
 
 def sign_data_hmac():
     _status_message()
-    print (bcolors.Green + "***********   Sign Data  ***************" + bcolors.ENDC)
+    print(bcolors.Green,
+          "***********   Sign Data  ***************" + bcolors.ENDC)
     # List available key
     session = objHSM['session']
 
@@ -408,22 +443,23 @@ def sign_data_hmac():
             menu("You must first create an HMAC key")
         for objlist in objslist:
             obj = objlist.get_info()
-            print (str(obj.id) + " - " + obj.label)
+            print(str(obj.id) + " - " + obj.label)
 
         keyid = input("What key ID would you like to use:")
-        datafilename = input("What is the name of the file you want to sign (current directory only):")
+        datafilename = input(
+            "What is the name of the file you want to sign ",
+            "(current directory only):")
 
-        '''
-        datafile = open(datafilename).read()
-        datafile = bytes(datafile, 'utf-8')
-        digest = sha256(datafile).digest()[:16]
-        hmackey = HmacKey(session, keyid)
-        '''
         keyid = int(keyid)
         hmackey = HmacKey(session, keyid)
-        datafile = open(datafilename, 'rb').read()
-        signature = hmackey.sign_hmac(datafile)
-        dataout = open(datafilename + "-" + str(keyid) +".sig", "+w")
+
+        sha256hash = sha256()
+        with open(datafilename, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256hash.update(byte_block)
+
+        signature = hmackey.sign_hmac(sha256hash.digest())
+        dataout = open(datafilename + "-" + str(keyid) + ".sig", "+w")
         dataout.write(signature.hex())
         dataout.close()
         menu("File has been created with signature in it for " + datafilename)
@@ -436,15 +472,17 @@ def sign_data_hmac():
     menu()
     return
 
+# ******************************************************************************
+# ***              CREATE SECTION
+# ******************************************************************************
 
-#******************************************************************************
-#***              CREATE SECTION
-#******************************************************************************
 
 def create_hmac():
     _status_message()
-    print (bcolors.Green + "***********   Create HMAC Key  ***************" + bcolors.ENDC)
-    object_id = int(input("What would you like for an object ID (0 = auto creates):"))
+    print(bcolors.Green,
+          "***********   Create HMAC Key  ***************" + bcolors.ENDC)
+    object_id = int(input(
+        "What would you like for an object ID (0 = auto creates):"))
     domains = input("What domains should this be assigned to:")
     label = input("What label would you like to set:")[:19]
 
@@ -455,8 +493,14 @@ def create_hmac():
 
     try:
         session = objHSM['session']
-        key = HmacKey.generate(session, object_id, label, domainint, capabilities, algorithm)
-    
+        key = HmacKey.generate(
+            session,
+            object_id,
+            label,
+            domainint,
+            capabilities,
+            algorithm)
+
         print("Created new HMAC key")
         print("Name: " + label)
         print("ID: " + str(key.id))
@@ -471,12 +515,15 @@ def create_hmac():
     except yubihsm.exceptions.YubiHsmInvalidResponseError:
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
-    
-def create_asymm():
 
+
+def create_asymm():
     _status_message()
-    print (bcolors.Green + "***********   Create Asymmetric Key Pair for signing operations  ***************" + bcolors.ENDC)
-    object_id = int(input("What would you like for an object ID (0 = auto creates):"))
+    print(bcolors.Green,
+          "***********   Create Asymmetric Key Pair for signing operations  ",
+          "***************" + bcolors.ENDC)
+    object_id = int(input("What would you like for an object ID (0 = ",
+                          "auto creates):"))
     domains = input("What domains should this be assigned to:")
     label = input("What label would you like to set:")[:19]
 
@@ -486,8 +533,14 @@ def create_asymm():
 
     try:
         session = objHSM['session']
-        key = AsymmetricKey.generate(session, object_id, label, domainint, capabilities, algorithm)
-    
+        key = AsymmetricKey.generate(
+            session,
+            object_id,
+            label,
+            domainint,
+            capabilities,
+            algorithm)
+
         print("Created new Asymmetric key pair")
         print("Name: " + label)
         print("ID: " + str(key.id))
@@ -503,20 +556,23 @@ def create_asymm():
     except yubihsm.exceptions.YubiHsmInvalidResponseError:
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
-    
+
 
 def create_auth():
 
     _status_message()
-    print (bcolors.Green + "***********   Create Authorization Key   ***************" + bcolors.ENDC)
-    object_id = int(input("What would you like for an object ID (0 = auto creates):   "))
+    print(bcolors.Green + "***********   Create Authorization Key   ",
+          "***************" + bcolors.ENDC)
+    object_id = int(input("What would you like for an object ID (0 = ",
+                          "auto creates):   "))
     domains = input("What domains should this be assigned to:  ")
     label = input("What label would you like to set:  ")[:19]
-    password = getpass.getpass("What password would you like to set (will not echo to screen):  ")
+    password = getpass.getpass("What password would you like to set ",
+                               "(will not echo to screen):  ")
 
     domainint = _hsmdomains(domains)
 
-    print ("Available Capability settings")
+    print("Available Capability settings")
     itemnum = 1
     itemlist = {}
     for cap in config['cap_alias']:
@@ -528,12 +584,19 @@ def create_auth():
     selconfig = itemlist[int(selcap)]
 
     capabilities = config['cap_alias'][selconfig]
-    delegated_capabilities = config['cap_alias'][selconfig] 
-    
+    delegated_capabilities = config['cap_alias'][selconfig]
+
     try:
         session = objHSM['session']
-        key = AuthenticationKey.put_derived(session, object_id, label, domainint, capabilities, delegated_capabilities, password)
-    
+        key = AuthenticationKey.put_derived(
+            session,
+            object_id,
+            label,
+            domainint,
+            capabilities,
+            delegated_capabilities,
+            password)
+
         print("Created new Auth key")
         print("Name: " + label)
         print("ID: " + str(key.id))
@@ -549,21 +612,23 @@ def create_auth():
     except yubihsm.exceptions.YubiHsmInvalidResponseError:
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
-    
 
-#******************************************************************************
-#***              IMPORT SECTION
-#******************************************************************************
+# ******************************************************************************
+# ***              IMPORT SECTION
+# ******************************************************************************
+
 
 def upload_asymm():
 
     _status_message()
-    print (bcolors.Green + "***********   Import Asymmetric Private Key   ***************" + bcolors.ENDC)
-    object_id = int(input("What would you like for an object ID (0 = auto creates):   "))
+    print(bcolors.Green + "***********   Import Asymmetric Private Key   ",
+          "***************" + bcolors.ENDC)
+    object_id = int(input("What would you like for an object ID (0 = auto ",
+                          "creates):   "))
     domains = input("What domains should this be assigned to:  ")
     label = input("What label would you like to set:  ")[:19]
     filename = input("What is the name of the file to import:")
-    print ("Available Capability settings")
+    print("Available Capability settings")
     itemnum = 1
     itemlist = {}
     for cap in config['cap_alias']:
@@ -582,10 +647,16 @@ def upload_asymm():
     pemfile.close()
 
     privatekey = load_pem_private_key(pemlines, None, default_backend())
-    
+
     try:
         session = objHSM['session']
-        key = AsymmetricKey.put(session, object_id, label, domainint, capabilities, privatekey)
+        key = AsymmetricKey.put(
+            session,
+            object_id,
+            label,
+            domainint,
+            capabilities,
+            privatekey)
         print("Name: " + label)
         print("ID: " + str(key.id))
         print("")
@@ -602,22 +673,23 @@ def upload_asymm():
         menu(message)
 
 
-#******************************************************************************
-#***              MENU SECTION
-#******************************************************************************
+# ******************************************************************************
+# ***              MENU SECTION
+# ******************************************************************************
+
 
 def menu(message=''):
     _status_message()
-    print (message)
-    print ("1 - Device info")
-    print ("2 - List Objects")
-    print ("3 - Get Random Number")
-    print ("4 - Create Auth Key")
-    print ("5 - Create Asymmetric key")
-    print ("6 - Import Asymmetric key")
-    print ("7 - Create HMAC Key")
-    print ("8 - Sign with HMAC")
-    print ("99 - Reset device")
+    print(message)
+    print("1 - Device info")
+    print("2 - List Objects")
+    print("3 - Get Random Number")
+    print("4 - Create Auth Key")
+    print("5 - Create Asymmetric key")
+    print("6 - Import Asymmetric key")
+    print("7 - Create HMAC Key")
+    print("8 - Sign with HMAC")
+    print("99 - Reset device")
     print("")
     print("Press Q to exit")
 
@@ -647,18 +719,19 @@ def menu(message=''):
 def yubihsmloop(message=''):
     _config_import()
     _status_message()
-    print (message)
-    print (bcolors.Green + "********** YubiHSM Manager ****************" + bcolors.ENDC)
-    print ("1 - Login")
-    print ("2 - Set configuration file path")
+    print(message)
+    print(bcolors.Green,
+          "********** YubiHSM Manager ****************" + bcolors.ENDC)
+    print("1 - Login")
+    print("2 - Set configuration file path")
 
     itemnum = 3
     itemlist = {}
     for hsm in config['hsms']:
-        print ( str(itemnum) + " - " + hsm)
+        print(str(itemnum) + " - " + hsm)
         itemlist[itemnum] = hsm
         itemnum = itemnum + 1
-    print ("")
+    print("")
 
     choice = input().lower()
     if choice == "1":
@@ -673,15 +746,17 @@ def yubihsmloop(message=''):
     elif choice == "q":
         exit()
     else:
-        yubihsmloop(bcolors.Red + "Invalid option. Please select an option from the list" + bcolors.ENDC)
+        yubihsmloop(bcolors.Red + "Invalid option. Please select an ",
+                    "option from the list" + bcolors.ENDC)
 
 if __name__ == '__main__':
-    print (bcolors.Red + "******************* Warning ***************" + bcolors.ENDC)
-    print ("This is not production ready code")
-    print ("It should only be used to learn how to interface")
-    print ("with the YubiHSM")
-    print ("Do you want to continue?")
-    print (bcolors.Green + "yes / NO" + bcolors.ENDC)
+    print(bcolors.Red,
+          "******************* Warning ***************" + bcolors.ENDC)
+    print("This is not production ready code")
+    print("It should only be used to learn how to interface")
+    print("with the YubiHSM")
+    print("Do you want to continue?")
+    print(bcolors.Green + "yes / NO" + bcolors.ENDC)
     choice = input().lower()
     if choice == 'yes':
         yubihsmloop()
