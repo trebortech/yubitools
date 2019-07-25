@@ -4,6 +4,7 @@ echo $STATUS
 if [[ $STATUS != "status=OK" ]]; then
     echo "Run reset routine"
     for i in /sys/bus/pci/drivers/[uoex]hci_hcd/*:*; do
+      echo "Inside Loop for $i"
       [[ -e "$i" ]] || continue
       echo "${i##*/}" > "${i%/*}/unbind"
       echo "${i##*/}" > "${i%/*}/bind"
