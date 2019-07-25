@@ -106,9 +106,9 @@ working_dir = ""
 
 # Default config settings
 defaultconfig = {
-    "hsms": {
+    "hsm_configs": {
     },
-    "cap_alias": {
+    "alias_capabilities": {
         "sign ECDSA": 128,
         "root auth": 140737488355327
     }
@@ -226,9 +226,9 @@ def _login(message='', configname='', *args, **kwargs):
     print(message)
     if configname:
         # Use information from configuration file
-        serverip = config['hsms'][configname]['serverip']
-        port = config['hsms'][configname]['port']
-        authid = int(config['hsms'][configname]['authid'])
+        serverip = config['hsm_configs'][configname]['serverip']
+        port = config['hsm_configs'][configname]['port']
+        authid = int(config['hsm_configs'][configname]['authid'])
 
         print(f"Connection to http://{serverip}:{port} using auth id {authid}")
     else:
@@ -241,12 +241,15 @@ def _login(message='', configname='', *args, **kwargs):
         authid = int(input())
 
     password = getpass.getpass(
-        "Password to auth id (will not echo to screen):")
+        "Password to auth id (will not echo to screen) or c to cancel:")
 
     currconnection['connector'] = {
         "serverip": serverip,
         "port": port,
         "authid": authid}
+
+    if password.lower() == 'c':
+        yubihsmloop("Cancel login")
 
     connected = _session(authid, serverip, port, password)
     if(connected[0]):
@@ -429,38 +432,77 @@ def get_random():
 # ******************************************************************************
 
 
-def sign_data_hmac():
+def sign_data(keytype='hmac256'):
     _status_message()
     print(bcolors.Green,
           "***********   Sign Data  ***************" + bcolors.ENDC)
     # List available key
     session = objHSM['session']
 
+    keytypes = {
+        "hmac256": {
+                "name": "HMAC",
+                "type": "hmac",
+                "filename": "hmac256",
+                "cap": config['capabilities']['sign hmac'],
+                "algo": config['algorithm']['hmac sha256'],
+                "objType": OBJECT.HMAC_KEY},
+        "asymm_ecdsa_p256": {
+                "name": "Asymmetric",
+                "type": "ecdsa",
+                "filename": "ecdsa-p256",
+                "cap": config['capabilities']["sign ecdsa"],
+                "algo": config['algorithm']["ec p256"],
+                "objType": OBJECT.ASYMMETRIC_KEY},
+        "asymm_pkcs1": {
+                "name": "Asymmetric",
+                "type": "pkcs1",
+                "filename": "pkcs1-",
+                "cap": config['capabilities']["sign ecdsa"],
+                "algo": config['algorithm']["ec p256"],
+                "objType": OBJECT.ASYMMETRIC_KEY}
+    }
+
     try:
-        objType = OBJECT.HMAC_KEY
-        objslist = session.list_objects(object_type=objType)
+        objType = keytypes[keytype]['objType']
+        cap = keytypes[keytype]['cap']
+        algo = keytypes[keytype]['algo']
+
+        objslist = session.list_objects(
+            object_type=objType,
+            capabilities=cap,
+            algorithm=algo)
         if len(objslist) == 0:
-            menu("You must first create an HMAC key")
+            menu(f"You must first create an {keytypes[keytype]['name']} key")
         for objlist in objslist:
             obj = objlist.get_info()
             print(str(obj.id) + " - " + obj.label)
 
         keyid = input("What key ID would you like to use:")
         datafilename = input(
-            "What is the name of the file you want to sign ",
+            "What is the name of the file you want to sign "
             "(current directory only):")
 
         keyid = int(keyid)
-        hmackey = HmacKey(session, keyid)
-
         sha256hash = sha256()
         with open(datafilename, "rb") as f:
             for byte_block in iter(lambda: f.read(4096), b""):
                 sha256hash.update(byte_block)
 
-        signature = hmackey.sign_hmac(sha256hash.digest())
-        dataout = open(datafilename + "-" + str(keyid) + ".sig", "+w")
-        dataout.write(signature.hex())
+        dataout = open("signature_file-" + str(keyid) + ".sig", "a+")
+
+        objCategory = keytypes[keytype]['type']
+        if objCategory == 'hmac':
+            hmackey = HmacKey(session, keyid)
+            signature = hmackey.sign_hmac(sha256hash.digest())
+        elif objCategory == "ecdsa":
+            asymmkey = AsymmetricKey(session, keyid)
+            signature = asymmkey.sign_ecdsa(sha256hash.digest())
+        elif objCategory == "pkcs1":
+            asymmkey = AsymmetricKey(session, keyid)
+            signature = asymmkey.sign_pkcs1v1_5(sha256hash.digest())
+
+        dataout.write(f"{datafilename}-sha256-{keytypes[keytype]['filename']}-{signature.hex()}\n")
         dataout.close()
         menu("File has been created with signature in it for " + datafilename)
     except yubihsm.exceptions.YubiHsmInvalidResponseError:
@@ -472,90 +514,104 @@ def sign_data_hmac():
     menu()
     return
 
+
+def sign_pkcs1():
+    _status_message()
+    print(bcolors.Green,
+          "***********   Sign Data PKCS1 ***************" + bcolors.ENDC)
+    # List available key
+    session = objHSM['session']
+
+    try:
+        objType = OBJECT.ASYMMETRIC_KEY
+        objslist = session.list_objects(object_type=objType)
+        if len(objslist) == 0:
+            menu("You must first create Asymmetric key")
+        for objlist in objslist:
+            obj = objlist.get_info()
+            print(str(obj.id) + " - " + obj.label)
+
+        keyid = input("What key ID would you like to use:")
+        datafilename = input(
+            "What is the name of the file you want to sign "
+            "(current directory only):")
+
+        keyid = int(keyid)
+        asymmkey = AsymmetricKey(session, keyid)
+
+        sha256hash = sha256()
+        with open(datafilename, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256hash.update(byte_block)
+
+        signature = asymmkey.sign_pkcs1v1_5(sha256hash.digest())
+        dataout = open("signature_file-" + str(keyid) + ".sig", "a+")
+        dataout.write(datafilename + "-sha256-pkcs1-" + signature.hex() + "\n")
+        dataout.close()
+        menu("File has been created with signature in it for " + datafilename)
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
+    except yubihsm.exceptions.YubiHsmConnectionError:
+        message = bcolors.Red + " Connection ERROR " + bcolors.ENDC
+        menu(message)
+    except yubihsm.exceptions.YubiHsmDeviceError:
+        message = bcolors.Red + " Invalid Data " + bcolors.ENDC
+        menu(message)
+    menu()
+    return
+
+
+def sign_eddsa():
+    _status_message()
+    print(bcolors.Green,
+          "***********   Sign Data  ***************" + bcolors.ENDC)
+    # List available key
+    session = objHSM['session']
+
+    try:
+        objType = OBJECT.ASYMMETRIC_KEY
+        objslist = session.list_objects(object_type=objType)
+        if len(objslist) == 0:
+            menu("You must first create Asymmetric key")
+        for objlist in objslist:
+            obj = objlist.get_info()
+            print(str(obj.id) + " - " + obj.label)
+
+        keyid = input("What key ID would you like to use:")
+        datafilename = input(
+            "What is the name of the file you want to sign "
+            "(current directory only):")
+
+        keyid = int(keyid)
+        asymmkey = AsymmetricKey(session, keyid)
+
+        sha256hash = sha256()
+        with open(datafilename, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256hash.update(byte_block)
+
+        signature = asymmkey.sign_eddsa(sha256hash.digest())
+        dataout = open("signature_file-" + str(keyid) + ".sig", "a+")
+        dataout.write(datafilename + "-sha256-ecdsa-" + signature.hex() + "\n")
+        dataout.close()
+        menu("File has been created with signature in it for " + datafilename)
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
+    except yubihsm.exceptions.YubiHsmConnectionError:
+        message = bcolors.Red + " Connection ERROR " + bcolors.ENDC
+        menu(message)
+    except yubihsm.exceptions.YubiHsmDeviceError:
+        message = bcolors.Red + " Invalid Data " + bcolors.ENDC
+        menu(message)
+    menu()
+    return
+
 # ******************************************************************************
 # ***              CREATE SECTION
+# ***
 # ******************************************************************************
-
-
-def create_hmac():
-    _status_message()
-    print(bcolors.Green,
-          "***********   Create HMAC Key  ***************" + bcolors.ENDC)
-    object_id = int(input(
-        "What would you like for an object ID (0 = auto creates):"))
-    domains = input("What domains should this be assigned to:")
-    label = input("What label would you like to set:")[:19]
-
-    domainint = _hsmdomains(domains)
-    # sign hmac + verify hmac
-    capabilities = 12582912
-    algorithm = ALGORITHM.HMAC_SHA256
-
-    try:
-        session = objHSM['session']
-        key = HmacKey.generate(
-            session,
-            object_id,
-            label,
-            domainint,
-            capabilities,
-            algorithm)
-
-        print("Created new HMAC key")
-        print("Name: " + label)
-        print("ID: " + str(key.id))
-        print("Press C to continue or Q to exit")
-        choice = input().lower()
-        if choice == "c":
-            menu()
-        elif choice == "q":
-            exit()
-    except yubihsm.exceptions.YubiHsmDeviceError:
-        print("Error")
-    except yubihsm.exceptions.YubiHsmInvalidResponseError:
-        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
-        menu(message)
-
-
-def create_asymm():
-    _status_message()
-    print(bcolors.Green,
-          "***********   Create Asymmetric Key Pair for signing operations  ",
-          "***************" + bcolors.ENDC)
-    object_id = int(input("What would you like for an object ID (0 = ",
-                          "auto creates):"))
-    domains = input("What domains should this be assigned to:")
-    label = input("What label would you like to set:")[:19]
-
-    domainint = _hsmdomains(domains)
-    capabilities = CAPABILITY.SIGN_ECDSA
-    algorithm = ALGORITHM.EC_P256
-
-    try:
-        session = objHSM['session']
-        key = AsymmetricKey.generate(
-            session,
-            object_id,
-            label,
-            domainint,
-            capabilities,
-            algorithm)
-
-        print("Created new Asymmetric key pair")
-        print("Name: " + label)
-        print("ID: " + str(key.id))
-        print("")
-        print("Press C to continue or Q to exit")
-        choice = input().lower()
-        if choice == "c":
-            menu()
-        elif choice == "q":
-            exit()
-    except yubihsm.exceptions.YubiHsmDeviceError:
-        print("Error")
-    except yubihsm.exceptions.YubiHsmInvalidResponseError:
-        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
-        menu(message)
 
 
 def create_auth():
@@ -563,7 +619,7 @@ def create_auth():
     _status_message()
     print(bcolors.Green + "***********   Create Authorization Key   ",
           "***************" + bcolors.ENDC)
-    object_id = int(input("What would you like for an object ID (0 = ",
+    object_id = int(input("What would you like for an object ID (0 = "
                           "auto creates):   "))
     domains = input("What domains should this be assigned to:  ")
     label = input("What label would you like to set:  ")[:19]
@@ -575,7 +631,7 @@ def create_auth():
     print("Available Capability settings")
     itemnum = 1
     itemlist = {}
-    for cap in config['cap_alias']:
+    for cap in config['alias_capabilities']:
         print(str(itemnum) + " - " + cap)
         itemlist[itemnum] = cap
         itemnum += 1
@@ -583,8 +639,8 @@ def create_auth():
 
     selconfig = itemlist[int(selcap)]
 
-    capabilities = config['cap_alias'][selconfig]
-    delegated_capabilities = config['cap_alias'][selconfig]
+    capabilities = config['alias_capabilities'][selconfig]
+    delegated_capabilities = config['alias_capabilities'][selconfig]
 
     try:
         session = objHSM['session']
@@ -613,6 +669,89 @@ def create_auth():
         message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
         menu(message)
 
+
+def create_key(keytype="hmac"):
+
+    _status_message()
+    # Key type settings
+    keytypes = {
+        "asymm": {
+            "name": "Asymmetric"},
+        "hmac": {
+            "name": "HMAC"}
+    }
+
+    print(bcolors.Green,
+          f"***********   Create {keytypes[keytype]['name']} Key   ",
+          "***************" + bcolors.ENDC)
+    object_id = int(input("What would you like for an object ID (0 = "
+                          "auto creates):   "))
+    domains = input("What domains should this be assigned to:  ")
+    label = input("What label would you like to set:  ")[:19]
+
+    domainint = _hsmdomains(domains)
+
+    print("Available Capability settings")
+    itemnum = 1
+    itemlist = {}
+    for cap in config['alias_capabilities']:
+        print(str(itemnum) + " - " + cap)
+        itemlist[itemnum] = cap
+        itemnum += 1
+    selcap = input("Which capability set would you like to use:  ")
+    selconfig = itemlist[int(selcap)]
+
+    capabilities = config['alias_capabilities'][selconfig]
+    # Available algorithm for keys
+    print("Available Algorithm set settings")
+    itemnum = 1
+    itemlist = {}
+    for cap in config['alias_algorithms']:
+        print(str(itemnum) + " - " + cap)
+        itemlist[itemnum] = cap
+        itemnum += 1
+    selcap = input("Which algorithm set would you like to use:  ")
+    selconfig = itemlist[int(selcap)]
+
+    selected_algorithm = config['alias_algorithms'][selconfig]
+
+    try:
+        session = objHSM['session']
+
+        if keytype == 'asymm':
+            key = AsymmetricKey.generate(
+                session,
+                object_id,
+                label,
+                domainint,
+                capabilities,
+                selected_algorithm)
+        elif keytype == "hmac":
+            key = HmacKey.generate(
+                session,
+                object_id,
+                label,
+                domainint,
+                capabilities,
+                selected_algorithm)
+
+        print("Created new key")
+        print("Name: " + label)
+        print("ID: " + str(key.id))
+        print("")
+        print("Press C to continue or Q to exit")
+        choice = input().lower()
+        if choice == "c":
+            menu()
+        elif choice == "q":
+            exit()
+    except yubihsm.exceptions.YubiHsmDeviceError:
+        print("Error")
+    except yubihsm.exceptions.YubiHsmInvalidResponseError:
+        message = bcolors.Red + " Incorrect MAC " + bcolors.ENDC
+        menu(message)
+
+
 # ******************************************************************************
 # ***              IMPORT SECTION
 # ******************************************************************************
@@ -623,7 +762,7 @@ def upload_asymm():
     _status_message()
     print(bcolors.Green + "***********   Import Asymmetric Private Key   ",
           "***************" + bcolors.ENDC)
-    object_id = int(input("What would you like for an object ID (0 = auto ",
+    object_id = int(input("What would you like for an object ID (0 = auto "
                           "creates):   "))
     domains = input("What domains should this be assigned to:  ")
     label = input("What label would you like to set:  ")[:19]
@@ -631,7 +770,7 @@ def upload_asymm():
     print("Available Capability settings")
     itemnum = 1
     itemlist = {}
-    for cap in config['cap_alias']:
+    for cap in config['alias_capabilities']:
         print(str(itemnum) + " - " + cap)
         itemlist[itemnum] = cap
         itemnum += 1
@@ -639,7 +778,7 @@ def upload_asymm():
 
     selconfig = itemlist[int(selcap)]
 
-    capabilities = config['cap_alias'][selconfig]
+    capabilities = config['alias_capabilities'][selconfig]
     domainint = _hsmdomains(domains)
 
     pemfile = open(filename, 'rb')
@@ -687,9 +826,15 @@ def menu(message=''):
     print("4 - Create Auth Key")
     print("5 - Create Asymmetric key")
     print("6 - Import Asymmetric key")
-    print("7 - Create HMAC Key")
-    print("8 - Sign with HMAC")
-    print("99 - Reset device")
+    print("7 - Sign PKCS1")
+    print("8 - Sign ECDSA")
+    print("9 - Sign EDDSA")
+    print("10 - Create HMAC Key")
+    print("11 - Sign with HMAC")
+    print("")
+    print("")
+    print("RESET - Reset device")
+    print("LOGOUT - Logout")
     print("")
     print("Press Q to exit")
 
@@ -703,15 +848,23 @@ def menu(message=''):
     elif choice == "4":
         create_auth()
     elif choice == "5":
-        create_asymm()
+        create_key("asymm")
     elif choice == "6":
         upload_asymm()
     elif choice == "7":
-        create_hmac()
+        sign_pkcs1()
     elif choice == "8":
-        sign_data_hmac()
-    elif choice == "99":
+        sign_data("asymm_ecdsa_p256")
+    elif choice == "9":
+        sign_eddsa()
+    elif choice == "10":
+        create_key("hmac")
+    elif choice == "11":
+        sign_data("hmac256")
+    elif choice == "reset":
         reset_hardware()
+    elif choice == "logout":
+        yubihsmloop(message="Logged out")
     elif choice == 'q':
         exit()
 
@@ -727,7 +880,7 @@ def yubihsmloop(message=''):
 
     itemnum = 3
     itemlist = {}
-    for hsm in config['hsms']:
+    for hsm in config['hsm_configs']:
         print(str(itemnum) + " - " + hsm)
         itemlist[itemnum] = hsm
         itemnum = itemnum + 1
