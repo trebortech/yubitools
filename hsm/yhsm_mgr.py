@@ -174,7 +174,7 @@ def _session(
 
     try:
         if sdk_version == 2:
-            hsm = YubiHsm.connect(f"http://{serverip}:{port}/connector/api")
+            hsm = YubiHsm.connect(f"http://{serverip}:{port}/api")
         else:
             hsm = YubiHsm.connect(f"http://{serverip}:{port}/connector/api")
         session = hsm.create_session_derived(authid, password)
