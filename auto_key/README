@@ -27,6 +27,11 @@ apt install python-pip libu2f-host0 libykpers-1-1 python-pyscard pcscd
 pip install yubikey-manager
 service pcscd start
 
+To install on Windows 10
+- Working on these details. The USB lib has some additional configuration to make it work. 
+
+
+
 
 Configuration file:
 name: auto_key.json
