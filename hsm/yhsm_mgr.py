@@ -173,7 +173,7 @@ def _session(
     global objHSM
 
     try:
-        hsm = YubiHsm.connect(f"http://{serverip}:{port}/connector/api")
+        hsm = YubiHsm.connect(f"http://{serverip}:{port}/api")
         session = hsm.create_session_derived(authid, password)
     except yubihsm.exceptions.YubiHsmAuthenticationError:
         message = bcolors.Red + "Login failed" + bcolors.ENDC
