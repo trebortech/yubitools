@@ -11,7 +11,7 @@
 #
 ##############################
 '''
-#Remove this line if you read and understand the message above
+Remove this line if you read and understand the message above
 
 
 # Import core libs
