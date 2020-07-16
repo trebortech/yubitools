@@ -46,7 +46,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
-
+sdk_version = 2
 # Supporting Class
 
 
@@ -173,7 +173,10 @@ def _session(
     global objHSM
 
     try:
-        hsm = YubiHsm.connect(f"http://{serverip}:{port}/api")
+        if sdk_version == 2:
+            hsm = YubiHsm.connect(f"http://{serverip}:{port}/api")
+        else:
+            hsm = YubiHsm.connect(f"http://{serverip}:{port}/connector/api")
         session = hsm.create_session_derived(authid, password)
     except yubihsm.exceptions.YubiHsmAuthenticationError:
         message = bcolors.Red + "Login failed" + bcolors.ENDC
