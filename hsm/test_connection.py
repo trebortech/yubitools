@@ -5,6 +5,6 @@ port = 12345
 authid = 1
 password= "password"
 
-hsm = YubiHsm.connect(f"http://{serverip}:{port}/connector/api")
+hsm = YubiHsm.connect(f"http://{serverip}:{port}/api")
 session = hsm.create_session_derived(authid, password)
-
+import pdb;pdb.set_trace()
