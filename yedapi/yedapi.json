@@ -1,0 +1,12 @@
+{
+    "apikey": "hsm",
+    "serverip": "127.0.0.1",
+    "port": "12345",
+    "authid": 1,
+    "apiobjectid": 2,
+    "dev": {
+        "GCP_IAAP_AUTH_TOKEN": ".....",
+        "GCP_IAP_UID": "....",
+        "url": "https://api.console.dev.in.yubico.org/v1"
+    }
+}
