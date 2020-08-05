@@ -1,0 +1,44 @@
+{
+	"info": {
+		"name": "YEDAPI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Product List",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.console.dev.in.yubico.org/v1/products",
+					"protocol": "https",
+					"host": [
+						"api",
+						"console",
+						"dev",
+						"in",
+						"yubico",
+						"org"
+					],
+					"path": [
+						"v1",
+						"products"
+					]
+				},
+				"description": "Get a list of all products"
+			},
+			"response": []
+		}
+	],
+	"protocolProfileBehavior": {}
+}
